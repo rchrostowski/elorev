@@ -5,11 +5,15 @@ import matplotlib.pyplot as plt
 import statsmodels.api as sm
 import datetime, pytz
 
-# --- Streamlit Page Config ---
 st.set_page_config(page_title="Corporate Finance Dashboard", layout="wide")
 
-# --- Sidebar Inputs ---
-st.sidebar.header("📊 Dashboard Controls")
+# --- Sidebar Navigation ---
+st.sidebar.title("📊 Dashboard Sections")
+page = st.sidebar.radio(
+    "Select a Section:",
+    ["Income Statement", "Balance Sheet", "Cash Flow", "Event Study"]
+)
+
 main_ticker = st.sidebar.text_input("Main Company Ticker", "LMT")
 competitors = st.sidebar.text_input("Competitor Tickers (comma-separated)", "BA, RTX, NOC, GD, BAESY")
 event_date_str = st.sidebar.text_input("Event Date (YYYY-MM-DD)", "2024-10-22")
@@ -17,7 +21,6 @@ event_date_str = st.sidebar.text_input("Event Date (YYYY-MM-DD)", "2024-10-22")
 competitor_tickers = [t.strip().upper() for t in competitors.split(",")]
 all_tickers = [main_ticker] + competitor_tickers
 
-# --- Data Fetching ---
 @st.cache_data
 def get_data(tickers):
     firms = {}
@@ -32,26 +35,19 @@ def get_data(tickers):
         }
     return firms
 
-with st.spinner("Collecting data..."):
-    data = get_data(all_tickers)
-st.success("✅ Data Loaded Successfully")
+data = get_data(all_tickers)
 
-# --- Tabs ---
-tab1, tab2, tab3, tab4 = st.tabs(["📈 Income Statement", "🏦 Balance Sheet", "💵 Cash Flow", "📅 Event Study"])
-
-# ========== TAB 1: INCOME STATEMENT ==========
-with tab1:
-    st.header("Income Statement Analysis")
-    st.markdown("""
-    This section shows the firm's **revenue**, **gross profit**, and **net income** over time, 
-    compared with competitors. These are key indicators of growth, cost efficiency, and profitability.
-    """)
-    
+# --- Income Statement ---
+if page == "Income Statement":
+    st.title("📈 Income Statement Analysis")
+    tabs = st.tabs(["Revenue", "Gross Profit", "Net Income"])
     metrics = ["Total Revenue", "Gross Profit", "Net Income"]
-    for metric in metrics:
-        metric_data = pd.DataFrame({t: d['financials'].loc[metric] for t, d in data.items() if metric in d['financials'].index})
-        if not metric_data.empty:
+
+    for tab, metric in zip(tabs, metrics):
+        with tab:
             st.subheader(metric)
+            st.markdown(f"This shows {metric.lower()} trends over time across companies.")
+            metric_data = pd.DataFrame({t: d['financials'].loc[metric] for t, d in data.items() if metric in d['financials'].index})
             st.dataframe(metric_data)
             fig, ax = plt.subplots(figsize=(10, 4))
             for t in metric_data.columns:
@@ -60,19 +56,17 @@ with tab1:
             ax.legend()
             st.pyplot(fig)
 
-# ========== TAB 2: BALANCE SHEET ==========
-with tab2:
-    st.header("Balance Sheet Analysis")
-    st.markdown("""
-    This section presents **assets**, **liabilities**, and **equity** trends across firms.  
-    These reflect financial stability, leverage, and long-term capital structure.
-    """)
-    
+# --- Balance Sheet ---
+elif page == "Balance Sheet":
+    st.title("🏦 Balance Sheet Analysis")
+    tabs = st.tabs(["Assets", "Liabilities", "Equity"])
     metrics = ["Total Assets", "Total Liabilities Net Minority Interest", "Total Stockholder Equity"]
-    for metric in metrics:
-        metric_data = pd.DataFrame({t: d['balance_sheet'].loc[metric] for t, d in data.items() if metric in d['balance_sheet'].index})
-        if not metric_data.empty:
+
+    for tab, metric in zip(tabs, metrics):
+        with tab:
             st.subheader(metric)
+            st.markdown(f"This displays {metric.lower()} trends across firms.")
+            metric_data = pd.DataFrame({t: d['balance_sheet'].loc[metric] for t, d in data.items() if metric in d['balance_sheet'].index})
             st.dataframe(metric_data)
             fig, ax = plt.subplots(figsize=(10, 4))
             for t in metric_data.columns:
@@ -81,20 +75,17 @@ with tab2:
             ax.legend()
             st.pyplot(fig)
 
-# ========== TAB 3: CASH FLOW ==========
-with tab3:
-    st.header("Cash Flow Analysis")
-    st.markdown("""
-    This section analyzes **operating**, **investing**, and **financing** cash flows to show  
-    how firms generate and use cash.  
-    Strong operating cash flow with manageable investing and financing activity indicates healthy financial operations.
-    """)
-    
+# --- Cash Flow ---
+elif page == "Cash Flow":
+    st.title("💵 Cash Flow Analysis")
+    tabs = st.tabs(["Operating", "Investing", "Financing"])
     metrics = ["Operating Cash Flow", "Investing Cash Flow", "Financing Cash Flow"]
-    for metric in metrics:
-        metric_data = pd.DataFrame({t: d['cashflow'].loc[metric] for t, d in data.items() if metric in d['cashflow'].index})
-        if not metric_data.empty:
+
+    for tab, metric in zip(tabs, metrics):
+        with tab:
             st.subheader(metric)
+            st.markdown(f"This shows {metric.lower()} activity and cash movement across firms.")
+            metric_data = pd.DataFrame({t: d['cashflow'].loc[metric] for t, d in data.items() if metric in d['cashflow'].index})
             st.dataframe(metric_data)
             fig, ax = plt.subplots(figsize=(10, 4))
             for t in metric_data.columns:
@@ -103,15 +94,16 @@ with tab3:
             ax.legend()
             st.pyplot(fig)
 
-# ========== TAB 4: EVENT STUDY ==========
-with tab4:
-    st.header("Event Study")
+# --- Event Study ---
+elif page == "Event Study":
+    st.title("📅 Event Study Analysis")
     st.markdown(f"""
-    This section studies the **stock reaction** of {main_ticker} around the chosen event date **{event_date_str}**.  
-    It compares actual returns with the expected returns (based on the market model) to identify **abnormal performance**.
+    Examine {main_ticker}'s stock behavior around **{event_date_str}**.  
+    The event study compares actual vs expected returns to detect abnormal performance.
     """)
-    
-    # Event Study Setup
+
+    tabs = st.tabs(["Explanation", "Event Study Chart"])
+
     nyc = pytz.timezone("America/New_York")
     event_date = nyc.localize(datetime.datetime.strptime(event_date_str, "%Y-%m-%d"))
     event_window = 5
@@ -136,20 +128,21 @@ with tab4:
     abnormal = event[main_ticker] - (alpha + beta * event["Market"])
     car = abnormal.cumsum()
 
-    # Explanation Section
-    st.subheader("📄 Event Explanation")
-    st.markdown(f"""
-    The model estimates how {main_ticker}'s returns typically move with the market (S&P 500).  
-    The difference between actual and expected returns represents **abnormal performance** —  
-    how the firm uniquely reacted around the event date.
-    """)
+    with tabs[0]:
+        st.subheader("Event Explanation")
+        st.markdown(f"""
+        The model estimates how {main_ticker} typically moves with the S&P 500.  
+        Abnormal returns show deviation from expected performance.  
+        Cumulative Abnormal Return (CAR) measures total market-adjusted gain/loss around the event.
+        """)
 
-    # Visualization Section
-    st.subheader("📊 Event Study Chart")
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(event.index, abnormal, label="Abnormal Return", marker='o')
-    ax.plot(event.index, car, label="Cumulative Abnormal Return", linestyle='--')
-    ax.legend()
-    ax.set_title(f"Event Study for {main_ticker} ({event_date_str})")
-    st.pyplot(fig)
+    with tabs[1]:
+        st.subheader("Event Study Chart")
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(event.index, abnormal, label="Abnormal Return", marker='o')
+        ax.plot(event.index, car, label="Cumulative Abnormal Return", linestyle='--')
+        ax.legend()
+        ax.set_title(f"Event Study for {main_ticker} ({event_date_str})")
+        st.pyplot(fig)
+
 
