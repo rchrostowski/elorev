@@ -7,7 +7,7 @@ import statsmodels.api as sm
 import datetime
 import pytz
 
-st.set_page_config(page_title="LMT Finance Dashboard", layout="wide")
+st.set_page_config(page_title="Corporate Finance Dashboard", layout="wide")
 
 # -------------------------------------
 # Utility Functions
@@ -288,8 +288,9 @@ elif section == "Event Study":
             continue
 
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=idx, y=abnormal, name="Abnormal Return", marker_color="indianred"))
-        fig.add_trace(go.Scatter(x=idx, y=car, name="CAR", marker_color="royalblue"))
+        # Changed CAR from bar to line
+        fig.add_trace(go.Scatter(x=idx, y=abnormal, mode="lines+markers", name="Abnormal Return", marker_color="indianred"))
+        fig.add_trace(go.Scatter(x=idx, y=car, mode="lines+markers", name="CAR", marker_color="royalblue"))
         fig.update_layout(template="plotly_white", title=f"{ticker} — {selected_event}", xaxis_title="Date", yaxis_title="Return")
         st.plotly_chart(fig, use_container_width=True, key=f"{ticker}_{selected_event}_event")
 
@@ -307,7 +308,7 @@ elif section == "Event Study":
     if df_ab.empty:
         st.warning("No data available for this event.")
     else:
-        # --- Fixed Indentation Here ---
+        # Abnormal returns comparison
         fig1 = go.Figure()
         for c in df_ab.columns:
             fig1.add_trace(go.Scatter(
@@ -326,13 +327,27 @@ elif section == "Event Study":
             hovermode="x unified",
             legend_title="Ticker"
         )
-
         st.plotly_chart(fig1, use_container_width=True, key=f"ab_{selected_event}")
 
+        # CAR comparison as lines (updated)
         fig2 = go.Figure()
         for c in df_car.columns:
-            fig2.add_trace(go.Scatter(x=df_car.index, y=df_car[c], mode="lines+markers", name=c))
-        fig2.update_layout(title=f"CAR Comparison ({selected_event})", template="plotly_white")
-        st.plotly_chart(fig2, use_container_width=True, key=f"car_{selected_event}")
+            fig2.add_trace(go.Scatter(
+                x=df_car.index,
+                y=df_car[c],
+                mode="lines+markers",
+                name=c,
+                hovertemplate="%{x}<br>%{y:.2%}<extra></extra>"
+            ))
 
+        fig2.update_layout(
+            title=f"Cumulative Abnormal Returns (CAR) Comparison ({selected_event})",
+            template="plotly_white",
+            xaxis_title="Date",
+            yaxis_title="CAR",
+            hovermode="x unified",
+            legend_title="Ticker"
+        )
+
+        st.plotly_chart(fig2, use_container_width=True, key=f"car_{selected_event}")
 
