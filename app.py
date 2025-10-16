@@ -307,11 +307,28 @@ elif section == "Event Study":
     if df_ab.empty:
         st.warning("No data available for this event.")
     else:
+        # --- Cleaned-up Abnormal Returns Comparison Chart ---
         fig1 = go.Figure()
-        for c in df_ab.columns:
-            fig1.add_trace(go.Bar(x=df_ab.index, y=df_ab[c], name=c))
-        fig1.update_layout(barmode="group", title=f"Abnormal Returns Comparison ({selected_event})", template="plotly_white")
+            for c in df_ab.columns:
+                fig1.add_trace(go.Scatter(
+                x=df_ab.index,
+                y=df_ab[c],
+                mode="lines+markers",
+                name=c,
+               hovertemplate="%{x}<br>%{y:.2%}<extra></extra>"
+            ))
+
+        fig1.update_layout(
+            title=f"Abnormal Returns Comparison ({selected_event})",
+            template="plotly_white",
+            xaxis_title="Date",
+            yaxis_title="Abnormal Return",
+            hovermode="x unified",
+            legend_title="Ticker"
+        )
+
         st.plotly_chart(fig1, use_container_width=True, key=f"ab_{selected_event}")
+
 
         fig2 = go.Figure()
         for c in df_car.columns:
