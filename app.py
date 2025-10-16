@@ -7,7 +7,7 @@ import statsmodels.api as sm
 import datetime
 import pytz
 
-st.set_page_config(page_title="Corporate Finance Dashboard", layout="wide")
+st.set_page_config(page_title="LMT Finance Dashboard", layout="wide")
 
 # -------------------------------------
 # Utility Functions
@@ -307,15 +307,15 @@ elif section == "Event Study":
     if df_ab.empty:
         st.warning("No data available for this event.")
     else:
-        # --- Cleaned-up Abnormal Returns Comparison Chart ---
+        # --- Fixed Indentation Here ---
         fig1 = go.Figure()
-            for c in df_ab.columns:
-                fig1.add_trace(go.Scatter(
+        for c in df_ab.columns:
+            fig1.add_trace(go.Scatter(
                 x=df_ab.index,
                 y=df_ab[c],
                 mode="lines+markers",
                 name=c,
-               hovertemplate="%{x}<br>%{y:.2%}<extra></extra>"
+                hovertemplate="%{x}<br>%{y:.2%}<extra></extra>"
             ))
 
         fig1.update_layout(
@@ -329,10 +329,10 @@ elif section == "Event Study":
 
         st.plotly_chart(fig1, use_container_width=True, key=f"ab_{selected_event}")
 
-
         fig2 = go.Figure()
         for c in df_car.columns:
             fig2.add_trace(go.Scatter(x=df_car.index, y=df_car[c], mode="lines+markers", name=c))
         fig2.update_layout(title=f"CAR Comparison ({selected_event})", template="plotly_white")
         st.plotly_chart(fig2, use_container_width=True, key=f"car_{selected_event}")
+
 
