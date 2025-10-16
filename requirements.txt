@@ -1,7 +1,8 @@
 streamlit
 yfinance
-matplotlib
-statsmodels
 pandas
-pytz
 numpy
+plotly
+statsmodels
+pytz
+
