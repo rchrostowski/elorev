@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 import statsmodels.api as sm
 import datetime
 import pytz
@@ -97,32 +96,35 @@ def styled_ratio_table(df):
 # -------------------------------------
 
 def event_study(ticker, date_str):
-    dt = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-    nyc = pytz.timezone("America/New_York")
-    dt = nyc.localize(dt)
+    try:
+        dt = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        nyc = pytz.timezone("America/New_York")
+        dt = nyc.localize(dt)
 
-    firm = yf.Ticker(ticker).history(start=dt - datetime.timedelta(days=220), end=dt + datetime.timedelta(days=10))
-    market = yf.Ticker("^GSPC").history(start=dt - datetime.timedelta(days=220), end=dt + datetime.timedelta(days=10))
+        firm = yf.Ticker(ticker).history(start=dt - datetime.timedelta(days=220), end=dt + datetime.timedelta(days=10))
+        market = yf.Ticker("^GSPC").history(start=dt - datetime.timedelta(days=220), end=dt + datetime.timedelta(days=10))
 
-    if firm.empty or market.empty:
+        if firm.empty or market.empty:
+            return None, None, None
+
+        fr, mr = firm["Close"].pct_change().dropna(), market["Close"].pct_change().dropna()
+        ret = pd.DataFrame({"Firm": fr, "Market": mr}).dropna()
+
+        est = ret.iloc[:-10]
+        ev = ret.iloc[-10:]
+
+        X = sm.add_constant(est["Market"])
+        model = sm.OLS(est["Firm"], X).fit()
+        alpha, beta = model.params
+        abnormal = ev["Firm"] - (alpha + beta * ev["Market"])
+        car = abnormal.cumsum()
+
+        return abnormal, car, ev.index
+    except:
         return None, None, None
 
-    fr, mr = firm["Close"].pct_change().dropna(), market["Close"].pct_change().dropna()
-    ret = pd.DataFrame({"Firm": fr, "Market": mr}).dropna()
-
-    est = ret.iloc[:-10]
-    ev = ret.iloc[-10:]
-
-    X = sm.add_constant(est["Market"])
-    model = sm.OLS(est["Firm"], X).fit()
-    alpha, beta = model.params
-    abnormal = ev["Firm"] - (alpha + beta * ev["Market"])
-    car = abnormal.cumsum()
-
-    return abnormal, car, ev.index
-
 # -------------------------------------
-# Sidebar and Setup
+# Sidebar
 # -------------------------------------
 
 st.sidebar.title("Dashboard Controls")
@@ -141,20 +143,18 @@ with st.spinner("Loading data..."):
     fx_rates = {t: get_fx_rate_to_usd(data[t]["currency"]) for t in all_tickers}
 
 # -------------------------------------
-# Hardcoded Event List
+# Hardcoded Events
 # -------------------------------------
 
-EVENTS = [
-    {"date": "2024-10-22", "desc": "Lockheed Martin Q3 2024 Earnings Beat and Raised Guidance"},
-    {"date": "2024-10-23", "desc": "Boeing Q3 2024 Earnings Miss and Production Delays"},
-    {"date": "2024-10-24", "desc": "Raytheon Q3 2024 Earnings In Line with Expectations"},
-    {"date": "2024-10-24", "desc": "Northrop Grumman Q3 2024 Earnings Miss Due to Supply Chain"},
-    {"date": "2024-10-23", "desc": "General Dynamics Q3 2024 Earnings Beat on Strong Demand"},
-    {"date": "2024-07-25", "desc": "BAE Systems Half-Year 2024 Results Show Increased Order Backlog"}
-]
+EVENTS = {
+    "2024-10-22": "Lockheed Martin Q3 2024 Earnings Beat and Raised Guidance",
+    "2024-10-23": "Boeing Q3 2024 Earnings Miss and Production Delays",
+    "2024-10-24": "Raytheon & Northrop Q3 2024 Results (Mixed Performance)",
+    "2024-07-25": "BAE Systems Half-Year 2024 Results Show Increased Order Backlog"
+}
 
 # -------------------------------------
-# Sections
+# Income Statement
 # -------------------------------------
 
 if section == "Income Statement":
@@ -186,7 +186,7 @@ if section == "Income Statement":
             for col in df.columns:
                 fig.add_trace(go.Scatter(x=df.index, y=df[col], mode="lines+markers", name=col))
             fig.update_layout(template="plotly_white", title=f"{metric} Over Time (USD)")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key=f"{metric}_chart")
 
     else:
         st.subheader("Key Ratios")
@@ -219,6 +219,10 @@ if section == "Income Statement":
         ratio_df = pd.DataFrame(ratios).T
         st.markdown(styled_ratio_table(ratio_df), unsafe_allow_html=True)
 
+# -------------------------------------
+# Balance Sheet
+# -------------------------------------
+
 elif section == "Balance Sheet":
     st.title("🏦 Balance Sheet")
     metric = st.selectbox("Choose a Metric", ["Total Assets", "Total Liabilities", "Total Equity"])
@@ -239,7 +243,11 @@ elif section == "Balance Sheet":
         for col in df.columns:
             fig.add_trace(go.Scatter(x=df.index, y=df[col], mode="lines+markers", name=col))
         fig.update_layout(template="plotly_white", title=f"{metric} Over Time (USD)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"{metric}_bs")
+
+# -------------------------------------
+# Cash Flow
+# -------------------------------------
 
 elif section == "Cash Flow":
     st.title("💵 Cash Flow")
@@ -261,57 +269,53 @@ elif section == "Cash Flow":
         for col in df.columns:
             fig.add_trace(go.Scatter(x=df.index, y=df[col], mode="lines+markers", name=col))
         fig.update_layout(template="plotly_white", title=f"{metric} Over Time (USD)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"{metric}_cf")
+
+# -------------------------------------
+# Event Study
+# -------------------------------------
 
 elif section == "Event Study":
-    st.title("📅 Event Study — Multi-Ticker and Multi-Event")
-    st.markdown("Below are detailed analyses for each firm and event, followed by cross-company comparisons.")
+    st.title("📅 Event Study")
+    selected_event = st.selectbox("Choose Event", list(EVENTS.keys()), format_func=lambda x: EVENTS[x])
 
-    # Per-company
+    # Per-company analysis
     for ticker in all_tickers:
-        st.header(f"{ticker} — Event Studies")
-        for ev in EVENTS:
-            abnormal, car, idx = event_study(ticker, ev["date"])
-            st.subheader(f"{ev['date']} — {ev['desc']}")
-            if abnormal is None:
-                st.warning(f"No data for {ticker} on {ev['date']}")
-                continue
+        abnormal, car, idx = event_study(ticker, selected_event)
+        st.subheader(f"{ticker} — {EVENTS[selected_event]}")
+        if abnormal is None:
+            st.warning(f"No data for {ticker} on {selected_event}")
+            continue
 
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=idx, y=abnormal, name="Abnormal Return", marker_color="indianred"))
-            fig.add_trace(go.Scatter(x=idx, y=car, name="CAR", marker_color="royalblue"))
-            fig.update_layout(template="plotly_white", title=f"{ticker} — {ev['date']}", xaxis_title="Date", yaxis_title="Return")
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown("---")
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=idx, y=abnormal, name="Abnormal Return", marker_color="indianred"))
+        fig.add_trace(go.Scatter(x=idx, y=car, name="CAR", marker_color="royalblue"))
+        fig.update_layout(template="plotly_white", title=f"{ticker} — {selected_event}", xaxis_title="Date", yaxis_title="Return")
+        st.plotly_chart(fig, use_container_width=True, key=f"{ticker}_{selected_event}_event")
 
     # Cross-company comparison
-    st.header("Cross-Company Comparisons")
-    for ev in EVENTS:
-        st.subheader(f"{ev['date']} — {ev['desc']}")
-        df_ab = pd.DataFrame()
-        df_car = pd.DataFrame()
-        for t in all_tickers:
-            abnormal, car, idx = event_study(t, ev["date"])
-            if abnormal is not None:
-                df_ab[t] = abnormal
-            if car is not None:
-                df_car[t] = car
-        if df_ab.empty:
-            st.warning("No data available for this event.")
-            continue
+    st.header("Cross-Company Comparison")
+    df_ab = pd.DataFrame()
+    df_car = pd.DataFrame()
+    for t in all_tickers:
+        abnormal, car, idx = event_study(t, selected_event)
+        if abnormal is not None:
+            df_ab[t] = abnormal
+        if car is not None:
+            df_car[t] = car
+
+    if df_ab.empty:
+        st.warning("No data available for this event.")
+    else:
         fig1 = go.Figure()
         for c in df_ab.columns:
             fig1.add_trace(go.Bar(x=df_ab.index, y=df_ab[c], name=c))
-        fig1.update_layout(barmode="group", title=f"Abnormal Returns Comparison ({ev['date']})", template="plotly_white")
-        st.plotly_chart(fig1, use_container_width=True)
+        fig1.update_layout(barmode="group", title=f"Abnormal Returns Comparison ({selected_event})", template="plotly_white")
+        st.plotly_chart(fig1, use_container_width=True, key=f"ab_{selected_event}")
 
         fig2 = go.Figure()
         for c in df_car.columns:
             fig2.add_trace(go.Scatter(x=df_car.index, y=df_car[c], mode="lines+markers", name=c))
-        fig2.update_layout(title=f"CAR Comparison ({ev['date']})", template="plotly_white")
-        st.plotly_chart(fig2, use_container_width=True)
-        st.markdown("---")
-
-
-
+        fig2.update_layout(title=f"CAR Comparison ({selected_event})", template="plotly_white")
+        st.plotly_chart(fig2, use_container_width=True, key=f"car_{selected_event}")
 
